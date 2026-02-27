@@ -6,26 +6,37 @@ in
 {
   imports = [
     ./amd.nix
+    ./nvidia.nix
   ];
   options.hardware.facter.detected = {
     graphics.enable = lib.mkEnableOption "Enable the Graphics module" // {
       default = builtins.length (config.hardware.facter.report.hardware.monitor or [ ]) > 0;
       defaultText = "hardware dependent";
     };
-    boot.graphics.kernelModules = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      # We currently don't auto import nouveau, in case the user might want to use the proprietary nvidia driver,
-      # We might want to change this in future, if we have a better idea, how to handle this.
-      default = lib.remove "nouveau" (
-        lib.uniqueStrings (
+    boot.graphics.kernelModules =
+      let
+        # config.hardware.facter.detected.graphics.nvidia should handle nvidia drivers instead
+        driversToFilter = [
+          # the user might want to use the proprietary driver instead so we don't auto import
+          "nouveau"
+          # out-of-tree
+          "nvidia"
+        ];
+
+        filteredDrivers = lib.filter (v: !(lib.elem v driversToFilter)) (
           facterLib.collectDrivers (config.hardware.facter.report.hardware.graphics_card or [ ])
-        )
-      );
-      defaultText = "hardware dependent";
-      description = ''
-        List of kernel modules to load at boot for the graphics card.
-      '';
-    };
+        );
+      in
+      lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        # We currently don't auto import nouveau, in case the user might want to use the proprietary nvidia driver,
+        # We might want to change this in future, if we have a better idea, how to handle this.
+        default = filteredDrivers;
+        defaultText = "hardware dependent";
+        description = ''
+          List of kernel modules to load at boot for the graphics card.
+        '';
+      };
   };
 
   config = lib.mkIf (config.hardware.facter.reportPath != null && cfg.enable) (
